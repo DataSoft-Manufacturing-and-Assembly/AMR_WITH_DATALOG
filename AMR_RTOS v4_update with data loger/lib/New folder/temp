@@ -1,0 +1,400 @@
+/*
+#include "DMA_WiFiManager.h"
+
+
+WiFiManager::WiFiManager(const char* apSSID, const char* apPassword)
+    : server(80), ssid(apSSID), password(apPassword), setCount(0), pressStartTime(0) {}
+String WiFiManager::generateHTML() {
+    String html = R"=====(
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>ESP32 Array Webpage</title>
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+                background-color: #e0f7fa; /* Light aqua background */
+                color: #00796b; /* Darker aqua text */
+                text-align: center;
+                margin: 0;
+                padding: 0;
+            }
+            h1 {
+                background-color: #004d40;
+                color: white;
+                padding: 20px;
+                margin: 0;
+            }
+            h2 {
+                color: #00695c;
+            }
+            ul {
+                list-style-type: none;
+                padding: 0;
+                margin: 20px 0;
+            }
+            li {
+                cursor: pointer;
+                padding: 10px;
+                margin: 5px 0;
+                background-color: #80deea;
+                border-radius: 5px;
+                transition: background-color 0.3s ease;
+            }
+            li:hover {
+                background-color: #4db6ac;
+            }
+            input[type="text"] {
+                padding: 8px;
+                border: 1px solid #00796b;
+                border-radius: 4px;
+                width: 80%;
+                max-width: 300px;
+            }
+            button {
+                background-color: #00796b;
+                color: white;
+                padding: 10px 20px;
+                border: none;
+                border-radius: 4px;
+                cursor: pointer;
+                font-size: 16px;
+                margin: 10px 5px;
+                transition: background-color 0.3s ease;
+            }
+            button:hover {
+                background-color: #004d40;
+            }
+        </style>
+    </head>
+    <body>
+        <h1>DMA WiFi Manager</h1>
+        <h2>Select an Item:</h2>
+        <ul>
+    )=====";
+
+    for (int i = 0; i < maxSSIDs; i++) {
+        html += "<li onclick=\"selectItem('" + ssidArray[i] + "')\">" + ssidArray[i] + "</li>";
+    }
+
+    html += R"=====(
+        </ul>
+
+        <h3>Enter Details</h3>
+        <label>Selected Item:</label><br>
+        <input type="text" id="text1" readonly><br><br>
+        <label>Origin:</label><br>
+        <input type="text" id="text2"><br><br>
+
+        <button onclick="setValues()">Set</button>
+        <button onclick="startFunction()">Start</button>
+
+        <script>
+            function selectItem(item) {
+                document.getElementById("text1").value = item;
+            }
+
+            function setValues() {
+                const item = document.getElementById("text1").value;
+                const origin = document.getElementById("text2").value;
+                fetch(`/set?name=${item}&origin=${origin}`)
+                    .then(response => response.text())
+                    .then(data => alert(data));
+            }
+
+            function startFunction() {
+                fetch('/start');
+            }
+        </script>
+    </body>
+    </html>
+    )=====";
+
+    return html;
+}
+
+
+void WiFiManager::setupRoutes() {
+    
+}
+
+void WiFiManager::begin() {
+    preferences.begin("storage", false);
+    bool allEmpty = true;
+
+    for (int i = 0; i < 6; i++) {
+        String key = "name" + String(i);
+        String loadedName = preferences.getString(key.c_str(), "");
+        if (!loadedName.isEmpty()) {
+            allEmpty = false;
+        }
+    }
+
+    if (allEmpty) {
+        Serial.println("No data found. Starting AP mode.");
+        startAP();
+    } else {
+        Serial.println("Data found. Connecting to WiFi.");
+        connect();
+    }
+
+    preferences.end();
+}
+
+void WiFiManager::handleClient() {
+    server.handleClient();
+}
+
+void WiFiManager::connect() {
+preferences.begin("storage", false);
+
+  setCount=0;
+    // Placeholder function to be implemented
+    Serial.println("Connect function called");
+    for (int i = 0; i < 6; i++) {
+       String key = "name" + String(i);  // Generate key name
+       String loadedName = preferences.getString(key.c_str(), "");
+       String key2 = "origin" + String(i);  // Generate key name
+       String loadedPass = preferences.getString(key2.c_str(), "");
+
+        Serial.print("Name: ");
+        Serial.println(loadedName);
+        Serial.print("Origin: ");
+        Serial.println(loadedPass);
+    }
+
+
+
+int n = WiFi.scanNetworks();
+
+    String bestSSID = "";
+    int bestRSSI = -100; // Start with a low RSSI
+    String bestPass="";
+    for (int i = 0; i <n ; ++i) {
+      String currentSSID = WiFi.SSID(i);
+      int currentRSSI = WiFi.RSSI(i);
+
+      for (int j = 0; j < 5; ++j) {
+        String key = "name" + String(j);  // Generate key name
+       String loadedName = preferences.getString(key.c_str(), "");
+        if (currentSSID == loadedName) {
+          Serial.print("Found SSID: ");
+          Serial.print(currentSSID);
+          Serial.print(" with RSSI: ");
+          Serial.println(currentRSSI);
+
+          if (currentRSSI > bestRSSI) {
+            bestSSID = currentSSID;
+            bestRSSI = currentRSSI;
+            String key2 = "origin" + String(j);  // Generate key name
+            String loadedPass = preferences.getString(key2.c_str(), "");
+            bestPass=loadedPass;
+          }
+        }
+      }
+    }
+
+      Serial.print(" best SSID: ");
+      Serial.print(bestSSID);
+WiFi.begin(bestSSID.c_str(), bestPass.c_str());
+    int attempts = 0;
+    while (WiFi.status() != WL_CONNECTED && attempts < 20) {
+        delay(500);
+        Serial.print(".");
+        attempts++;
+
+    }
+    if (WiFi.status() == WL_CONNECTED)
+    {
+
+      Serial.println("connected");
+    }
+    else{
+      Serial.println("wificonnection was not established. going for hotspot mode");
+      startAP();
+
+    }
+
+
+    WiFi.softAPdisconnect(true);   // Stop Soft AP and disconnect clients
+    Serial.println("Soft AP stopped.");
+
+  preferences.end();
+}
+
+void WiFiManager::startAP() {
+   preferences.begin("storage", false);
+    preferences.clear(); // Clear preferences in "storage"
+    Serial.println("Preferences cleared.");
+
+    WiFi.mode(WIFI_STA);
+    delay(100);
+
+    Serial.println("Scanning for WiFi networks...");
+    int n = WiFi.scanNetworks();
+    Serial.print("Found networks: ");
+    Serial.println(n);
+
+    if (n == 0) {
+        Serial.println("No networks found.");
+    } else {
+        for (int i = 0; i < n; ++i) {
+            String currentSSID = WiFi.SSID(i);
+            int currentRSSI = WiFi.RSSI(i);
+
+            Serial.print("SSID: ");
+            Serial.print(currentSSID);
+            Serial.print(" | Signal strength (RSSI): ");
+            Serial.println(currentRSSI);
+
+            if (i < maxSSIDs) {
+                ssidArray[i] = currentSSID; // Save SSID to the array
+            }
+
+            if (i == maxSSIDs - 1) {
+                break; // Stop after storing the maximum allowed SSIDs
+            }
+        }
+    }
+
+    WiFi.softAP(ssid, password);
+    Serial.println("Access point started");
+    Serial.print("IP address: ");
+    Serial.println(WiFi.softAPIP());
+
+    server.on("/", HTTP_GET, [this]() {
+        server.send(200, "text/html", generateHTML());
+    });
+
+
+
+
+
+
+
+
+
+
+
+  server.on("/set", HTTP_GET, [this]() {
+    preferences.begin("storage", false); // Open preferences in "storage" namespace
+
+    // Ensure both 'name' and 'origin' parameters are provided
+    if (server.hasArg("name") && server.hasArg("origin")) {
+        String nameParam = server.arg("name");
+        String originParam = server.arg("origin");
+        Serial.print(nameParam);
+        if (setCount < maxSSIDs) {
+            // Construct keys for storing in preferences
+            String keyName = "name" + String(setCount);  // Key for SSID
+            String keyOrigin = "origin" + String(setCount);  // Key for password
+
+            // Store SSID and password in preferences
+            preferences.putString(keyName.c_str(), nameParam);
+            preferences.putString(keyOrigin.c_str(), originParam);
+
+            // Debugging: Confirm the values are stored
+            String loadedName = preferences.getString(keyName.c_str(), "");
+            String loadedOrigin = preferences.getString(keyOrigin.c_str(), "");
+
+            Serial.print("Stored SSID: ");
+            Serial.println(loadedName);
+            Serial.print("Stored Password: ");
+            Serial.println(loadedOrigin);
+
+            // Increment the set count
+            setCount++;
+
+            server.send(200, "text/plain", "Values set successfully");
+        } else {
+            server.send(200, "text/plain", "Maximum sets reached");
+        }
+    } else {
+        server.send(400, "text/plain", "Missing name or origin parameter");
+    }
+
+    preferences.end(); // Close preferences
+});
+
+
+
+
+
+
+
+
+
+    server.on("/start", HTTP_GET, [this]() {
+        connect();
+        server.send(200, "text/plain", "Connect function called");
+    });
+
+    preferences.end();
+    server.begin();
+}
+
+bool WiFiManager::isConnected() {
+    return WiFi.status() == WL_CONNECTED;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+//main
+#include "DMA_WiFiManager.h"
+
+
+// Create a WiFiManager instance
+WiFiManager wifiManager("test", "12346789");
+
+void setup() {
+    Serial.begin(115200);
+    pinMode(14, INPUT);
+    wifiManager.begin();
+}
+int x=0;
+void loop() {
+    wifiManager.handleClient();
+    if(x==0){
+    if (WiFi.status() != WL_CONNECTED) {
+
+
+        Serial.println("Not connected to WiFi. Attempting to reconnect...");
+        
+    } else {
+        Serial.println("Connected to WiFi!");
+    }
+    x=1;
+    }
+      int z = digitalRead(14);
+    if ( z == LOW) {
+      Serial.println(z);
+
+  
+        unsigned long pressStartTime = millis();
+        while (digitalRead(14) == LOW) {
+            if (millis() - pressStartTime > 5000) {
+                wifiManager.startAP();
+                break;
+            }
+        }
+    }
+    
+}
+
+*/
+
